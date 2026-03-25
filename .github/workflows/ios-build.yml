@@ -20,7 +20,7 @@ jobs:
           npm install
           npm install @capacitor/core @capacitor/cli @capacitor/ios
           npm run build
-          npx cap init "Wumpus Squad" com.wumpus.squad --web-dir dist
+          npx cap init "Wumpus" com.wumpus --web-dir dist
           npx cap add ios
           npx cap sync ios
 
@@ -28,4 +28,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-project-files
-          path: wumpus-squad/ios/App/
+          path: wumpus/ios/App/
