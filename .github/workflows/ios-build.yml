@@ -4,11 +4,6 @@ on: [push]
 jobs:
   build:
     runs-on: macos-latest
-    # This line tells GitHub to look inside your subfolder
-    defaults:
-      run:
-        working-directory: ./wumpus-squad
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -18,16 +13,13 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Dependencies
+      - name: Install and Build
         run: |
+          # This command finds where your package.json is and moves there
+          cd $(find . -name package.json -exec dirname {} \;)
           npm install
           npm install @capacitor/core @capacitor/cli @capacitor/ios
-
-      - name: Build Web Project
-        run: npm run build
-
-      - name: Initialize Capacitor
-        run: |
+          npm run build
           npx cap init "Wumpus Squad" com.wumpus.squad --web-dir dist
           npx cap add ios
           npx cap sync ios
@@ -36,4 +28,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-project-files
-          path: wumpus-squad/ios/App/
+          path: "**/ios/App/"
