@@ -1,3 +1,15 @@
+# Wumpus Squad — Gaming Community App
+
+## Features
+- Discord-like layout: text channels, voice channel, DMs, member list, profiles
+- Real-time messaging (polling every 2.5s), presence heartbeat every 7s
+- Role badge system: DEV (cyan), MOD (green), ADMIN (red), VIP (gold) — ZENXOY auto-assigned DEV
+- **Screen sharing**: `getDisplayMedia()` — shows live local preview in stream panel
+- **Camera / Go Live**: `getUserMedia()` — camera stream shown in stream panel
+- Stream status broadcast via `stream:active` backend key; other users see who is live
+- **Create Group**: modal to pick icon + name a new channel; persisted to backend as `channels:custom`
+- Custom channels appear in all channel tabs and selectors
+
 # Workspace
 
 ## Overview

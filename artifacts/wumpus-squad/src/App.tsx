@@ -475,6 +475,19 @@ function MainApp({ user, onLogout }) {
   const [friendSearch, setFriendSearch] = useState("");
   const [loadoutSel, setLoadoutSel] = useState({weapon:"Rifle",armor:"Heavy",perk:"Stealth"});
   const [roles, setRoles] = useState<Record<string,string>>({});
+  /* ── screen share / stream ── */
+  const [screenStream, setScreenStream] = useState<MediaStream|null>(null);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isCamLive, setIsCamLive]       = useState(false);
+  const [camStream, setCamStream]       = useState<MediaStream|null>(null);
+  const [activeStreamer, setActiveStreamer] = useState<{name:string;email:string;type:string}|null>(null);
+  const screenVideoRef  = useRef<HTMLVideoElement>(null);
+  const camVideoRef     = useRef<HTMLVideoElement>(null);
+  /* ── create group ── */
+  const [customChannels, setCustomChannels] = useState<{id:string;label:string;icon:string}[]>([]);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupIcon, setNewGroupIcon] = useState("🎮");
   const chatRef = useRef();
   const pollRef = useRef();
 
@@ -510,9 +523,94 @@ function MainApp({ user, onLogout }) {
 
   const getRole = (name: string) => roles[name?.toLowerCase()] || null;
 
+  /* ── load custom channels ── */
+  useEffect(()=>{
+    const load=async()=>{
+      const data=await sGet("channels:custom");
+      if(Array.isArray(data)) setCustomChannels(data);
+    };
+    load();
+  },[]);
+
+  const allChannels = [...CHANNELS, ...customChannels];
+
+  /* ── screen share ── */
+  const startScreenShare = async () => {
+    try {
+      const stream = await (navigator.mediaDevices as any).getDisplayMedia({ video:true, audio:true });
+      setScreenStream(stream);
+      setIsScreenSharing(true);
+      setActiveNav(0);
+      await sSet("stream:active", { name:user.name, email:user.email, type:"screen", ts:Date.now() });
+      stream.getVideoTracks()[0].onended = stopScreenShare;
+      setTimeout(()=>{ if(screenVideoRef.current){ screenVideoRef.current.srcObject=stream; screenVideoRef.current.play().catch(()=>{}); } },100);
+    } catch {}
+  };
+
+  const stopScreenShare = async () => {
+    if(screenStream){ screenStream.getTracks().forEach(t=>t.stop()); setScreenStream(null); }
+    setIsScreenSharing(false);
+    await sSet("stream:active", null);
+  };
+
+  /* ── camera / go live ── */
+  const startCamLive = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+      setCamStream(stream);
+      setIsCamLive(true);
+      setActiveNav(0);
+      await sSet("stream:active", { name:user.name, email:user.email, type:"cam", ts:Date.now() });
+      setTimeout(()=>{ if(camVideoRef.current){ camVideoRef.current.srcObject=stream; camVideoRef.current.play().catch(()=>{}); } },100);
+    } catch {}
+  };
+
+  const stopCamLive = async () => {
+    if(camStream){ camStream.getTracks().forEach(t=>t.stop()); setCamStream(null); }
+    setIsCamLive(false);
+    await sSet("stream:active", null);
+  };
+
+  /* ── create group ── */
+  const createGroup = async () => {
+    const name = newGroupName.trim();
+    if(!name) return;
+    const id = name.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"");
+    if(allChannels.find(c=>c.id===id)) return;
+    const updated = [...customChannels, { id, label:name, icon:newGroupIcon }];
+    setCustomChannels(updated);
+    await sSet("channels:custom", updated);
+    setNewGroupName(""); setNewGroupIcon("🎮"); setShowCreateGroup(false);
+    setChannel(id);
+  };
+
+  /* ── attach streams to video elements ── */
+  useEffect(()=>{
+    if(screenVideoRef.current&&screenStream){
+      screenVideoRef.current.srcObject=screenStream;
+      screenVideoRef.current.play().catch(()=>{});
+    }
+  },[isScreenSharing,screenStream]);
+
+  useEffect(()=>{
+    if(camVideoRef.current&&camStream){
+      camVideoRef.current.srcObject=camStream;
+      camVideoRef.current.play().catch(()=>{});
+    }
+  },[isCamLive,camStream]);
+
+  /* ── poll active streamer ── */
+  useEffect(()=>{
+    const t=setInterval(async()=>{
+      const data=await sGet("stream:active");
+      setActiveStreamer(data&&Date.now()-data.ts<15000?data:null);
+    },3000);
+    return()=>clearInterval(t);
+  },[]);
+
   const poll = useCallback(async()=>{
     const newMsgs={};
-    for(const ch of CHANNELS){
+    for(const ch of allChannels){
       const data=await sGet(`chan:${ch.id}`);
       newMsgs[ch.id]=Array.isArray(data)?data:[];
     }
@@ -529,7 +627,7 @@ function MainApp({ user, onLogout }) {
       if(u&&now-u.ts<18000) users.push(u);
     }
     setOnline(users);
-  },[user,dmTarget]);
+  },[user,dmTarget,customChannels]);
 
   useEffect(()=>{
     poll();
@@ -568,14 +666,56 @@ function MainApp({ user, onLogout }) {
     if(activeNav===0) return (
       <div style={{display:"flex",flexDirection:"column",gap:8,padding:8,flex:1,overflowY:"auto"}}>
         <div style={{color:"#9b6dff",fontWeight:700,fontSize:13}}>📺 Stream</div>
+
+        {/* My stream controls */}
         <div style={{background:"#1a1430",border:"1px solid #2e2050",borderRadius:10,padding:12}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <div style={{animation:"glow 2.5s infinite"}}><PixelNelly size={38}/></div>
-            <div><div style={{fontWeight:700,fontSize:13}}>Nelly</div><div style={{fontSize:10,color:"#7766aa"}}>Streaming</div></div>
+          <div style={{fontSize:11,fontWeight:700,color:"#7766aa",marginBottom:8}}>GO LIVE</div>
+          <div style={{display:"flex",gap:6}}>
+            {!isScreenSharing&&!isCamLive&&(
+              <button onClick={startScreenShare} style={{flex:1,background:"#9b6dff22",border:"1px solid #9b6dff55",borderRadius:7,padding:"7px 4px",color:"#c8a8ff",fontSize:11,fontWeight:700,cursor:"pointer"}}>🖥 Share Screen</button>
+            )}
+            {!isScreenSharing&&!isCamLive&&(
+              <button onClick={startCamLive} style={{flex:1,background:"#e040fb22",border:"1px solid #e040fb55",borderRadius:7,padding:"7px 4px",color:"#e8a0ff",fontSize:11,fontWeight:700,cursor:"pointer"}}>📷 Camera</button>
+            )}
+            {isScreenSharing&&(
+              <button onClick={stopScreenShare} style={{flex:1,background:"#ff444422",border:"1px solid #ff4444",borderRadius:7,padding:"7px 4px",color:"#ff8888",fontSize:11,fontWeight:700,cursor:"pointer"}}>⏹ Stop Sharing</button>
+            )}
+            {isCamLive&&(
+              <button onClick={stopCamLive} style={{flex:1,background:"#ff444422",border:"1px solid #ff4444",borderRadius:7,padding:"7px 4px",color:"#ff8888",fontSize:11,fontWeight:700,cursor:"pointer"}}>⏹ End Stream</button>
+            )}
           </div>
-          <LIVE/>
-          <div style={{marginTop:8,fontSize:11,color:"#7766aa"}}>🎮 Wumpus Squad · {online.length} watching</div>
+          {(isScreenSharing||isCamLive)&&(
+            <div style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}>
+              <LIVE/>
+              <span style={{fontSize:10,color:"#c8a8ff"}}>{isScreenSharing?"Sharing screen":"Camera live"}</span>
+            </div>
+          )}
         </div>
+
+        {/* Active streamer card */}
+        {activeStreamer&&activeStreamer.email!==user.email&&(
+          <div style={{background:"#1a1430",border:"1px solid #ff333355",borderRadius:10,padding:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <UserAvatar name={activeStreamer.name} size={32}/>
+              <div><div style={{fontWeight:700,fontSize:12}}>{activeStreamer.name}</div><div style={{fontSize:10,color:"#7766aa"}}>{activeStreamer.type==="screen"?"Screen sharing":"Camera"}</div></div>
+            </div>
+            <LIVE/>
+            <div style={{marginTop:6,fontSize:10,color:"#7766aa"}}>🎮 Wumpus Squad · {online.length} watching</div>
+          </div>
+        )}
+
+        {/* Default Nelly card when nobody is live */}
+        {!activeStreamer&&!isScreenSharing&&!isCamLive&&(
+          <div style={{background:"#1a1430",border:"1px solid #2e2050",borderRadius:10,padding:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <div style={{animation:"glow 2.5s infinite"}}><PixelNelly size={38}/></div>
+              <div><div style={{fontWeight:700,fontSize:13}}>Nelly</div><div style={{fontSize:10,color:"#7766aa"}}>Streaming</div></div>
+            </div>
+            <LIVE/>
+            <div style={{marginTop:8,fontSize:11,color:"#7766aa"}}>🎮 Wumpus Squad · {online.length} watching</div>
+          </div>
+        )}
+
         <div style={{background:"#1a1430",border:"1px solid #2e2050",borderRadius:10,padding:12}}>
           <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Playlist</div>
           {["Wumpus Squad Map 3","Battle Royale Ranked","Solo Queue Grind"].map((t,i)=>(
@@ -863,9 +1003,10 @@ function MainApp({ user, onLogout }) {
                 <span style={{marginLeft:"auto",fontSize:10,color:"#44ff88"}}>●{online.length}</span>
               </div>
               <div style={{display:"flex",gap:2,padding:"0 8px 6px",overflowX:"auto",borderBottom:"1px solid #1e153522"}}>
-                {CHANNELS.filter(c=>c.id!=="voice").map(ch=>(
+                {allChannels.filter(c=>c.id!=="voice").map(ch=>(
                   <button key={ch.id} onClick={()=>setChannel(ch.id)} style={{background:activeChannel===ch.id?"#9b6dff33":"transparent",border:`1px solid ${activeChannel===ch.id?"#9b6dff55":"transparent"}`,borderRadius:6,padding:"3px 8px",fontSize:10,color:activeChannel===ch.id?"#c8a8ff":"#6655aa",whiteSpace:"nowrap"}}>{ch.icon}{ch.label}</button>
                 ))}
+                <button onClick={()=>setShowCreateGroup(true)} style={{background:"transparent",border:"1px solid #2e205055",borderRadius:6,padding:"3px 7px",fontSize:10,color:"#9b6dff",whiteSpace:"nowrap",fontWeight:700}}>+ New</button>
               </div>
             </div>
             <div style={{padding:"6px 13px 4px",borderBottom:"1px solid #1e153515",flexShrink:0}}>
@@ -899,16 +1040,33 @@ function MainApp({ user, onLogout }) {
           {/* STREAM + BOTTOM */}
           <div style={{flex:1,display:"flex",flexDirection:"column",gap:7,padding:7,minWidth:0}}>
             <div style={{flex:1,background:"#1a1430",border:"1px solid #2e2050",borderRadius:10,overflow:"hidden",position:"relative"}}>
-              <StreamBg/>
+              {/* Live screen share video */}
+              {isScreenSharing&&<video ref={screenVideoRef} muted autoPlay playsInline style={{width:"100%",height:"100%",objectFit:"contain",background:"#000"}}/>}
+              {/* Live camera video */}
+              {isCamLive&&!isScreenSharing&&<video ref={camVideoRef} muted autoPlay playsInline style={{width:"100%",height:"100%",objectFit:"cover",background:"#000"}}/>}
+              {/* Default animated bg */}
+              {!isScreenSharing&&!isCamLive&&<StreamBg/>}
               <div style={{position:"absolute",top:10,right:12,display:"flex",gap:6,zIndex:2}}>
-                <button onClick={()=>setStreamPlaying(v=>!v)} style={{background:"#0d0a1a99",border:"1px solid #2e2050",borderRadius:5,padding:"4px 8px",color:"#c8b0ff",fontSize:12}}>{streamPlaying?"⏸":"▶"}</button>
+                {!isScreenSharing&&!isCamLive&&<button onClick={()=>setStreamPlaying(v=>!v)} style={{background:"#0d0a1a99",border:"1px solid #2e2050",borderRadius:5,padding:"4px 8px",color:"#c8b0ff",fontSize:12}}>{streamPlaying?"⏸":"▶"}</button>}
+                {isScreenSharing&&<button onClick={stopScreenShare} style={{background:"#ff444499",border:"1px solid #ff4444",borderRadius:5,padding:"4px 8px",color:"#fff",fontSize:11,fontWeight:700}}>⏹ Stop</button>}
+                {isCamLive&&<button onClick={stopCamLive} style={{background:"#ff444499",border:"1px solid #ff4444",borderRadius:5,padding:"4px 8px",color:"#fff",fontSize:11,fontWeight:700}}>⏹ End</button>}
               </div>
               <div style={{position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",background:"#0d0a1acc",backdropFilter:"blur(6px)",border:"1px solid #2e2050",borderRadius:18,padding:"5px 16px",display:"flex",alignItems:"center",gap:8,zIndex:2}}>
-                <PixelNelly size={22}/><span style={{fontWeight:700,fontSize:13}}>Nelly</span><LIVE/>
+                {isScreenSharing||isCamLive
+                  ?<><UserAvatar name={user.name} size={22} photo={user.photo}/><span style={{fontWeight:700,fontSize:13}}>{user.name}</span><LIVE/></>
+                  :<><PixelNelly size={22}/><span style={{fontWeight:700,fontSize:13}}>Nelly</span><LIVE/></>
+                }
               </div>
-              {!streamPlaying&&(
+              {!streamPlaying&&!isScreenSharing&&!isCamLive&&(
                 <div style={{position:"absolute",inset:0,background:"#00000066",zIndex:3,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}} onClick={()=>setStreamPlaying(true)}>
                   <div style={{width:60,height:60,borderRadius:"50%",background:"#9b6dff88",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>▶</div>
+                </div>
+              )}
+              {/* Go live prompt when idle */}
+              {!isScreenSharing&&!isCamLive&&(
+                <div style={{position:"absolute",bottom:14,right:14,display:"flex",gap:6,zIndex:4}}>
+                  <button onClick={startScreenShare} style={{background:"#9b6dff99",border:"1px solid #9b6dff",borderRadius:6,padding:"5px 10px",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>🖥 Share Screen</button>
+                  <button onClick={startCamLive} style={{background:"#e040fb99",border:"1px solid #e040fb",borderRadius:6,padding:"5px 10px",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>📷 Go Live</button>
                 </div>
               )}
               <div style={{position:"absolute",bottom:0,left:0,right:0,height:3,background:"#2e2050",zIndex:2}}>
@@ -936,20 +1094,46 @@ function MainApp({ user, onLogout }) {
                   <div style={{display:"flex",gap:5}}><PixelNelly size={20}/><PixelWumpus size={20}/>{voiceJoined&&<UserAvatar name={user.name} size={20} photo={user.photo}/>}</div>
                 </div>
               </div>
-              <div style={{flex:1,background:"#1a1430",border:"1px solid #2e2050",borderRadius:10}}>
+              <div style={{flex:1,background:"#1a1430",border:"1px solid #2e2050",borderRadius:10,display:"flex",flexDirection:"column"}}>
                 <div style={{display:"flex",alignItems:"center",padding:"9px 12px 4px",borderBottom:"1px solid #2e205025"}}>
                   <span style={{color:"#7766aa",fontSize:16,marginRight:5}}>#</span>
-                  <span style={{fontWeight:700,fontSize:12}}>Channels</span>
+                  <span style={{fontWeight:700,fontSize:12,flex:1}}>Channels</span>
+                  <button onClick={()=>setShowCreateGroup(true)} title="Create group" style={{background:"#9b6dff33",border:"1px solid #9b6dff55",borderRadius:5,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",color:"#c8a8ff",fontSize:14,fontWeight:700,cursor:"pointer",lineHeight:1}}>+</button>
                 </div>
                 <ChanGraph channels={CHANNELS} active={activeChannel} onSelect={setChannel}/>
-                <div style={{padding:"0 10px 6px",display:"flex",flexWrap:"wrap",gap:4}}>
-                  {CHANNELS.map(ch=>(
+                <div style={{padding:"0 10px 6px",display:"flex",flexWrap:"wrap",gap:4,overflowY:"auto",maxHeight:54}}>
+                  {allChannels.map(ch=>(
                     <button key={ch.id} onClick={()=>setChannel(ch.id)} style={{background:activeChannel===ch.id?"#9b6dff33":"transparent",border:`1px solid ${activeChannel===ch.id?"#9b6dff55":"#2e2050"}`,borderRadius:5,padding:"2px 7px",fontSize:9,color:activeChannel===ch.id?"#c8a8ff":"#6655aa"}}>{ch.icon}{ch.label}</button>
                   ))}
                 </div>
               </div>
             </div>
           </div>
+
+          {/* CREATE GROUP MODAL */}
+          {showCreateGroup&&(
+            <div style={{position:"fixed",inset:0,background:"#00000088",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e=>{if(e.target===e.currentTarget)setShowCreateGroup(false)}}>
+              <div style={{background:"#1a1430",border:"1px solid #9b6dff55",borderRadius:14,padding:24,width:300,boxShadow:"0 0 40px #9b6dff33"}}>
+                <div style={{fontWeight:700,fontSize:15,marginBottom:16}}>Create New Group</div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,color:"#7766aa",marginBottom:5}}>Group Icon</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {["🎮","⚔️","🛡","🏆","🎯","💥","🌍","🔥","💬","🎵","📢","🤝"].map(ic=>(
+                      <button key={ic} onClick={()=>setNewGroupIcon(ic)} style={{fontSize:18,background:newGroupIcon===ic?"#9b6dff44":"#2e205055",border:`1px solid ${newGroupIcon===ic?"#9b6dff":"#2e2050"}`,borderRadius:6,padding:"4px 6px",cursor:"pointer"}}>{ic}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,color:"#7766aa",marginBottom:5}}>Group Name</div>
+                  <input value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createGroup()} placeholder="e.g. ranked-squad" style={{width:"100%",background:"#0d0a1a",border:"1px solid #2e2050",borderRadius:7,padding:"8px 10px",color:"#e8e0ff",fontSize:13,boxSizing:"border-box"}}/>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>setShowCreateGroup(false)} style={{flex:1,background:"#2e205055",border:"1px solid #2e2050",borderRadius:7,padding:"8px 0",color:"#7766aa",fontSize:13,cursor:"pointer"}}>Cancel</button>
+                  <button onClick={createGroup} disabled={!newGroupName.trim()} style={{flex:1,background:newGroupName.trim()?"#9b6dff":"#9b6dff44",border:"1px solid #9b6dff",borderRadius:7,padding:"8px 0",color:"#fff",fontSize:13,fontWeight:700,cursor:newGroupName.trim()?"pointer":"default"}}>Create</button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
