@@ -4,6 +4,11 @@ on: [push]
 jobs:
   build:
     runs-on: macos-latest
+    # This line tells GitHub to look inside your subfolder
+    defaults:
+      run:
+        working-directory: ./wumpus-squad
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -31,4 +36,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-project-files
-          path: ios/App/
+          path: wumpus-squad/ios/App/
