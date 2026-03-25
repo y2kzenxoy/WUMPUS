@@ -14,9 +14,9 @@ jobs:
           node-version: 20
 
       - name: Install and Build
+        # We tell the shell exactly where to go for every command
         run: |
-          # This command finds where your package.json is and moves there
-          cd $(find . -name package.json -exec dirname {} \;)
+          cd wumpus-squad
           npm install
           npm install @capacitor/core @capacitor/cli @capacitor/ios
           npm run build
@@ -28,4 +28,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-project-files
-          path: "**/ios/App/"
+          path: wumpus-squad/ios/App/
