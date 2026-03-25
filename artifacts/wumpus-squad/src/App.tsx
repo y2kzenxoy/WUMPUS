@@ -40,6 +40,29 @@ const PixelWumpus = ({ size = 36 }) => (
 const COLORS = ["#9b6dff","#e040fb","#00e5ff","#ff6644","#44ff88","#ffdd00","#ff4488","#44ddff"];
 const colorFor = (n) => COLORS[(n||"?").split("").reduce((a,c)=>a+c.charCodeAt(0),0) % COLORS.length];
 
+/* ─── ROLES ─────────────────────────────────────────────────── */
+const ROLE_META: Record<string, { label: string; color: string; bg: string; glow: string }> = {
+  DEV:  { label:"DEV",  color:"#00e5ff", bg:"#00e5ff1a", glow:"#00e5ff66" },
+  MOD:  { label:"MOD",  color:"#44ff88", bg:"#44ff881a", glow:"#44ff8866" },
+  ADMIN:{ label:"ADMIN",color:"#ff4488", bg:"#ff44881a", glow:"#ff448866" },
+  VIP:  { label:"VIP",  color:"#ffdd00", bg:"#ffdd001a", glow:"#ffdd0066" },
+};
+
+const RoleBadge = ({ role }: { role: string }) => {
+  const meta = ROLE_META[role];
+  if (!meta) return null;
+  return (
+    <span style={{
+      fontSize:8, fontWeight:800, letterSpacing:1,
+      color: meta.color, background: meta.bg,
+      border:`1px solid ${meta.color}55`,
+      borderRadius:3, padding:"1px 5px",
+      boxShadow:`0 0 6px ${meta.glow}`,
+      fontFamily:"monospace", flexShrink:0,
+    }}>{meta.label}</span>
+  );
+};
+
 const UserAvatar = ({ name, size=32, photo }) => {
   if (photo) return (
     <img src={photo} alt={name}
@@ -451,6 +474,7 @@ function MainApp({ user, onLogout }) {
   const [showLoadout, setShowLoadout] = useState(false);
   const [friendSearch, setFriendSearch] = useState("");
   const [loadoutSel, setLoadoutSel] = useState({weapon:"Rifle",armor:"Heavy",perk:"Stealth"});
+  const [roles, setRoles] = useState<Record<string,string>>({});
   const chatRef = useRef();
   const pollRef = useRef();
 
@@ -468,6 +492,23 @@ function MainApp({ user, onLogout }) {
     const t=setInterval(beat,7000);
     return()=>clearInterval(t);
   },[user]);
+
+  useEffect(()=>{
+    const loadRoles = async () => {
+      let data = await sGet("roles:config") as Record<string,string> | null;
+      if (!data) {
+        data = { "zenxoy": "DEV" };
+        await sSet("roles:config", data);
+      } else if (!data["zenxoy"]) {
+        data = { ...data, "zenxoy": "DEV" };
+        await sSet("roles:config", data);
+      }
+      setRoles(data);
+    };
+    loadRoles();
+  },[]);
+
+  const getRole = (name: string) => roles[name?.toLowerCase()] || null;
 
   const poll = useCallback(async()=>{
     const newMsgs={};
@@ -610,7 +651,7 @@ function MainApp({ user, onLogout }) {
                 <div style={{position:"absolute",bottom:-1,right:-1,width:9,height:9,borderRadius:"50%",background:"#44ff88",border:"2px solid #0f0b22"}}/>
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,color:dmTarget===u.email?"#c8a8ff":"#d8d0ee"}}>{u.name}</div>
+                <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:12,fontWeight:600,color:dmTarget===u.email?"#c8a8ff":"#d8d0ee"}}>{u.name}</span>{getRole(u.name)&&<RoleBadge role={getRole(u.name)!}/>}</div>
                 <div style={{fontSize:10,color:"#44ff88"}}>● Online</div>
               </div>
             </button>
@@ -647,7 +688,7 @@ function MainApp({ user, onLogout }) {
                 <div style={{position:"absolute",bottom:-1,right:-1,width:8,height:8,borderRadius:"50%",background:"#44ff88",border:"2px solid #0f0b22"}}/>
               </div>
               <div style={{flex:1}}>
-                <div style={{fontSize:12,fontWeight:600}}>{u.name}{u.email===user.email?" (you)":""}</div>
+                <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:12,fontWeight:600}}>{u.name}{u.email===user.email?" (you)":""}</span>{getRole(u.name)&&<RoleBadge role={getRole(u.name)!}/>}</div>
                 <div style={{fontSize:10,color:"#44ff88"}}>● Online</div>
               </div>
               {u.email!==user.email&&(
@@ -664,7 +705,7 @@ function MainApp({ user, onLogout }) {
         <div style={{flex:1,overflowY:"auto",padding:12}}>
           <div style={{textAlign:"center",marginBottom:14}}>
             <UserAvatar name={user.name} size={64} photo={user.photo}/>
-            <div style={{fontWeight:700,fontSize:16,marginTop:8}}>{user.name}</div>
+            <div style={{fontWeight:700,fontSize:16,marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>{user.name}{getRole(user.name)&&<RoleBadge role={getRole(user.name)!}/>}</div>
             <div style={{fontSize:11,color:"#7766aa",marginTop:2}}>{user.email}</div>
             <div style={{marginTop:6}}>
               {user.provider==="google"&&<span style={{background:"#4285F422",color:"#4285F4",padding:"2px 8px",borderRadius:4,fontSize:10}}>🔗 Google</span>}
@@ -771,7 +812,7 @@ function MainApp({ user, onLogout }) {
         <div style={{padding:"7px 10px",borderTop:"1px solid #1e1535",display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
           <UserAvatar name={user.name} size={26} photo={user.photo}/>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:11,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</div>
+            <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</span>{getRole(user.name)&&<RoleBadge role={getRole(user.name)!}/>}</div>
             <div style={{fontSize:9,color:"#44ff88"}}>● Online</div>
           </div>
           <button onClick={()=>setActiveNav(5)} style={{background:"none",border:"none",color:"#6655aa",fontSize:14}}>⚙</button>
@@ -798,7 +839,7 @@ function MainApp({ user, onLogout }) {
                 <div key={m.id} style={{display:"flex",gap:10,marginTop:grouped?1:10,animation:"fadein 0.2s ease",flexDirection:isMe?"row-reverse":"row"}}>
                   {!grouped?<UserAvatar name={m.name} size={30} photo={m.photo}/>:<div style={{width:30,flexShrink:0}}/>}
                   <div style={{maxWidth:"68%"}}>
-                    {!grouped&&<div style={{fontSize:10,color:"#5544aa",marginBottom:3,textAlign:isMe?"right":"left"}}>{m.name}·{m.ts}</div>}
+                    {!grouped&&<div style={{fontSize:10,color:"#5544aa",marginBottom:3,textAlign:isMe?"right":"left",display:"flex",gap:4,alignItems:"center",justifyContent:isMe?"flex-end":"flex-start"}}><span style={{color:isMe?"#9b6dff":"#8877aa",fontWeight:600}}>{m.name}</span>{getRole(m.name)&&<RoleBadge role={getRole(m.name)!}/>}<span>·{m.ts}</span></div>}
                     <div style={{fontSize:13,lineHeight:1.5,background:isMe?"#9b6dff33":"#1a1430",border:`1px solid ${isMe?"#9b6dff44":"#2e2050"}`,padding:"7px 11px",borderRadius:isMe?"12px 12px 3px 12px":"12px 12px 12px 3px",display:"inline-block",color:"#e8e0ff"}}>{m.text}</div>
                   </div>
                 </div>
@@ -840,7 +881,7 @@ function MainApp({ user, onLogout }) {
                   <div key={m.id} style={{padding:`${grouped?1:6}px 13px`,display:"flex",gap:8,animation:"fadein 0.2s ease"}}>
                     {!grouped?<UserAvatar name={m.name} size={28} photo={m.photo}/>:<div style={{width:28,flexShrink:0}}/>}
                     <div style={{flex:1,minWidth:0}}>
-                      {!grouped&&<div style={{display:"flex",gap:7,alignItems:"baseline",marginBottom:2}}><span style={{fontWeight:700,fontSize:12,color:col}}>{m.name}{isMe?" (you)":""}</span><span style={{fontSize:9,color:"#5544aa"}}>{m.ts}</span></div>}
+                      {!grouped&&<div style={{display:"flex",gap:5,alignItems:"center",marginBottom:2,flexWrap:"wrap"}}><span style={{fontWeight:700,fontSize:12,color:col}}>{m.name}{isMe?" (you)":""}</span>{getRole(m.name)&&<RoleBadge role={getRole(m.name)!}/>}<span style={{fontSize:9,color:"#5544aa",marginLeft:2}}>{m.ts}</span></div>}
                       <div style={{fontSize:11,color:"#d8d0ee",lineHeight:1.5,background:isMe?"#9b6dff15":"transparent",padding:isMe?"3px 7px":"0",borderRadius:isMe?7:0,display:"inline-block",maxWidth:"100%"}}>{m.text}</div>
                     </div>
                   </div>

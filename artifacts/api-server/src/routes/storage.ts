@@ -2,7 +2,9 @@ import { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 
-const store = new Map<string, string>();
+const store = new Map<string, string>([
+  ["roles:config", JSON.stringify({ zenxoy: "DEV" })],
+]);
 
 router.get("/storage/get/:key", (req, res) => {
   const { key } = req.params;
