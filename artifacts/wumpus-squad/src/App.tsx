@@ -488,6 +488,15 @@ function MainApp({ user, onLogout }) {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupIcon, setNewGroupIcon] = useState("🎮");
+  /* ── clubs ── */
+  type Club = {id:string;name:string;icon:string;color:string;description:string;createdBy:string;members:string[];ts:number};
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [showCreateClub, setShowCreateClub] = useState(false);
+  const [newClubName, setNewClubName] = useState("");
+  const [newClubDesc, setNewClubDesc] = useState("");
+  const [newClubIcon, setNewClubIcon] = useState("🎮");
+  const [newClubColor, setNewClubColor] = useState("#9b6dff");
+  const [clubView, setClubView] = useState<Club|null>(null);
   const chatRef = useRef();
   const pollRef = useRef();
 
@@ -531,6 +540,49 @@ function MainApp({ user, onLogout }) {
     };
     load();
   },[]);
+
+  /* ── load clubs ── */
+  useEffect(()=>{
+    const load=async()=>{
+      const data=await sGet("clubs:list");
+      if(Array.isArray(data)) setClubs(data);
+    };
+    load();
+    const t=setInterval(async()=>{
+      const data=await sGet("clubs:list");
+      if(Array.isArray(data)) setClubs(data);
+    },5000);
+    return()=>clearInterval(t);
+  },[]);
+
+  const saveClubs=async(updated:Club[])=>{
+    setClubs(updated);
+    await sSet("clubs:list",updated);
+  };
+
+  const createClub=async()=>{
+    const name=newClubName.trim();
+    if(!name) return;
+    const id=`club-${Date.now()}`;
+    const club:Club={id,name,icon:newClubIcon,color:newClubColor,description:newClubDesc.trim(),createdBy:user.name,members:[user.email],ts:Date.now()};
+    await saveClubs([...clubs,club]);
+    setNewClubName(""); setNewClubDesc(""); setNewClubIcon("🎮"); setNewClubColor("#9b6dff");
+    setShowCreateClub(false);
+    setClubView(club);
+  };
+
+  const joinClub=async(id:string)=>{
+    const updated=clubs.map(c=>c.id===id&&!c.members.includes(user.email)?{...c,members:[...c.members,user.email]}:c);
+    await saveClubs(updated);
+    const found=updated.find(c=>c.id===id);
+    if(found) setClubView(found);
+  };
+
+  const leaveClub=async(id:string)=>{
+    const updated=clubs.map(c=>c.id===id?{...c,members:c.members.filter(e=>e!==user.email)}:c);
+    await saveClubs(updated);
+    setClubView(null);
+  };
 
   const allChannels = [...CHANNELS, ...customChannels];
 
@@ -660,6 +712,7 @@ function MainApp({ user, onLogout }) {
   const navItems=[
     {icon:"📺",tip:"Stream"},{icon:"〜",tip:"Pulse"},{icon:"💬",tip:"Messages"},
     {icon:"🌐",tip:"Discover"},{icon:"👥",tip:"Members"},{icon:"👤",tip:"Profile"},
+    {icon:"🏆",tip:"Clubs"},
   ];
 
   const sidebar=()=>{
@@ -854,7 +907,7 @@ function MainApp({ user, onLogout }) {
             </div>
           </div>
           <div style={{background:"#1a1430",border:"1px solid #2e2050",borderRadius:10,padding:12,marginBottom:10}}>
-            {[["Squad","⚔️ Wumpus Squad"],["Status","🟢 Online"],["Messages",`${Object.values(msgs).flat().filter(m=>m.email===user.email).length} sent`]].map(([k,v])=>(
+            {[["Squad","⚔️ Wumpus Squad"],["Status","🟢 Online"],["Messages",`${Object.values(msgs).flat().filter(m=>m.email===user.email).length} sent`],["Clubs",`${clubs.filter(c=>c.members.includes(user.email)).length} joined`]].map(([k,v])=>(
               <div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0"}}>
                 <span style={{color:"#7766aa"}}>{k}</span><span style={{color:"#c8a8ff"}}>{v}</span>
               </div>
@@ -864,6 +917,145 @@ function MainApp({ user, onLogout }) {
         </div>
       </div>
     );
+    if(activeNav===6) {
+      const CLUB_COLORS=["#9b6dff","#e040fb","#00e5ff","#44ff88","#ff4488","#ffaa00","#ff6644","#00ddcc"];
+      const CLUB_ICONS=["🎮","⚔️","🛡","🏆","🎯","💥","🌍","🔥","👾","🚀","🎵","🎲","🤖","🐉","🦊","🏅"];
+      const myClubs=clubs.filter(c=>c.members.includes(user.email));
+      const otherClubs=clubs.filter(c=>!c.members.includes(user.email));
+
+      if(clubView) {
+        const cv=clubs.find(c=>c.id===clubView.id)||clubView;
+        const isMember=cv.members.includes(user.email);
+        return (
+          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+            <div style={{padding:"10px 12px",borderBottom:"1px solid #1e1535",flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
+              <button onClick={()=>setClubView(null)} style={{background:"none",border:"none",color:"#9b6dff",fontSize:16,cursor:"pointer",padding:0}}>←</button>
+              <div style={{width:28,height:28,borderRadius:7,background:`${cv.color}22`,border:`2px solid ${cv.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{cv.icon}</div>
+              <span style={{fontWeight:700,fontSize:13,flex:1}}>{cv.name}</span>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:12,display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{background:"#1a1430",border:`1px solid ${cv.color}33`,borderRadius:10,padding:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  <div style={{width:48,height:48,borderRadius:12,background:`${cv.color}22`,border:`3px solid ${cv.color}66`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{cv.icon}</div>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:15}}>{cv.name}</div>
+                    <div style={{fontSize:10,color:"#7766aa"}}>Founded by {cv.createdBy}</div>
+                  </div>
+                </div>
+                {cv.description&&<div style={{fontSize:12,color:"#b8a8d8",lineHeight:1.6,marginBottom:10}}>{cv.description}</div>}
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:11,color:"#7766aa"}}>👥 {cv.members.length} member{cv.members.length!==1?"s":""}</span>
+                  {isMember
+                    ?<button onClick={()=>leaveClub(cv.id)} style={{background:"#ff444422",border:"1px solid #ff444455",borderRadius:6,padding:"4px 12px",color:"#ff8888",fontSize:11,fontWeight:600,cursor:"pointer"}}>Leave</button>
+                    :<button onClick={()=>joinClub(cv.id)} style={{background:`${cv.color}22`,border:`1px solid ${cv.color}55`,borderRadius:6,padding:"4px 12px",color:cv.color,fontSize:11,fontWeight:600,cursor:"pointer"}}>Join Club</button>
+                  }
+                </div>
+              </div>
+              <div style={{fontWeight:600,fontSize:11,color:"#7766aa",paddingLeft:2}}>MEMBERS</div>
+              {online.filter(u=>cv.members.includes(u.email)).map(u=>(
+                <div key={u.email} style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{position:"relative"}}><UserAvatar name={u.name} size={26} photo={u.photo}/><div style={{position:"absolute",bottom:-1,right:-1,width:7,height:7,borderRadius:"50%",background:"#44ff88",border:"2px solid #0f0b22"}}/></div>
+                  <span style={{fontSize:12,fontWeight:600}}>{u.name}{u.email===user.email?" (you)":""}</span>
+                  {getRole(u.name)&&<RoleBadge role={getRole(u.name)!}/>}
+                </div>
+              ))}
+              {cv.members.filter(e=>!online.find(u=>u.email===e)).length>0&&(
+                <div style={{fontSize:11,color:"#4a3a66"}}>+{cv.members.filter(e=>!online.find(u=>u.email===e)).length} offline member{cv.members.filter(e=>!online.find(u=>u.email===e)).length!==1?"s":""}</div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+          <div style={{padding:"10px 12px",borderBottom:"1px solid #1e1535",flexShrink:0,display:"flex",alignItems:"center"}}>
+            <span style={{fontWeight:700,fontSize:13,flex:1}}>🏆 Clubs</span>
+            <button onClick={()=>setShowCreateClub(true)} style={{background:"#9b6dff33",border:"1px solid #9b6dff55",borderRadius:6,padding:"4px 10px",color:"#c8a8ff",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Create</button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:8,display:"flex",flexDirection:"column",gap:7}}>
+            {myClubs.length>0&&<div style={{fontSize:10,fontWeight:700,color:"#7766aa",padding:"2px 4px"}}>YOUR CLUBS</div>}
+            {myClubs.map(c=>(
+              <div key={c.id} onClick={()=>setClubView(c)} style={{background:"#1a1430",border:`1px solid ${c.color}44`,borderRadius:9,padding:"10px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:36,height:36,borderRadius:9,background:`${c.color}22`,border:`2px solid ${c.color}66`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{c.icon}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:2}}>{c.name}</div>
+                  <div style={{fontSize:10,color:"#7766aa"}}>👥 {c.members.length} member{c.members.length!==1?"s":""}</div>
+                </div>
+                <span style={{background:`${c.color}22`,color:c.color,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>JOINED</span>
+              </div>
+            ))}
+            {otherClubs.length>0&&<div style={{fontSize:10,fontWeight:700,color:"#7766aa",padding:"2px 4px",marginTop:4}}>DISCOVER</div>}
+            {otherClubs.map(c=>(
+              <div key={c.id} style={{background:"#1a1430",border:`1px solid ${c.color}22`,borderRadius:9,padding:"10px 12px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                  <div style={{width:36,height:36,borderRadius:9,background:`${c.color}22`,border:`2px solid ${c.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{c.icon}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:12,marginBottom:2}}>{c.name}</div>
+                    {c.description&&<div style={{fontSize:10,color:"#7766aa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.description}</div>}
+                  </div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:10,color:"#7766aa"}}>👥 {c.members.length} member{c.members.length!==1?"s":""}</span>
+                  <div style={{display:"flex",gap:5}}>
+                    <button onClick={()=>setClubView(c)} style={{background:"transparent",border:"1px solid #2e2050",borderRadius:5,padding:"3px 8px",color:"#7766aa",fontSize:10,cursor:"pointer"}}>View</button>
+                    <button onClick={()=>joinClub(c.id)} style={{background:`${c.color}22`,border:`1px solid ${c.color}55`,borderRadius:5,padding:"3px 10px",color:c.color,fontSize:10,fontWeight:600,cursor:"pointer"}}>Join</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {clubs.length===0&&(
+              <div style={{textAlign:"center",padding:"40px 20px",color:"#4a3a66"}}>
+                <div style={{fontSize:32,marginBottom:8}}>🏆</div>
+                <div style={{fontSize:12,marginBottom:4}}>No clubs yet</div>
+                <div style={{fontSize:11}}>Be the first to create one!</div>
+              </div>
+            )}
+          </div>
+
+          {/* CREATE CLUB MODAL */}
+          {showCreateClub&&(
+            <div style={{position:"fixed",inset:0,background:"#00000088",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e=>{if(e.target===e.currentTarget)setShowCreateClub(false)}}>
+              <div style={{background:"#1a1430",border:"1px solid #9b6dff55",borderRadius:14,padding:24,width:320,boxShadow:"0 0 40px #9b6dff33",maxHeight:"80vh",overflowY:"auto"}}>
+                <div style={{fontWeight:700,fontSize:15,marginBottom:16}}>Create a Club</div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,color:"#7766aa",marginBottom:5}}>Icon</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {CLUB_ICONS.map(ic=>(
+                      <button key={ic} onClick={()=>setNewClubIcon(ic)} style={{fontSize:16,background:newClubIcon===ic?"#9b6dff44":"#2e205055",border:`1px solid ${newClubIcon===ic?"#9b6dff":"#2e2050"}`,borderRadius:6,padding:"4px 6px",cursor:"pointer"}}>{ic}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,color:"#7766aa",marginBottom:5}}>Color</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {CLUB_COLORS.map(col=>(
+                      <button key={col} onClick={()=>setNewClubColor(col)} style={{width:24,height:24,borderRadius:"50%",background:col,border:`2px solid ${newClubColor===col?"#fff":"transparent"}`,cursor:"pointer"}}/>
+                    ))}
+                  </div>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,color:"#7766aa",marginBottom:5}}>Club Name *</div>
+                  <input value={newClubName} onChange={e=>setNewClubName(e.target.value)} placeholder="e.g. Ranked Grinders" style={{width:"100%",background:"#0d0a1a",border:"1px solid #2e2050",borderRadius:7,padding:"8px 10px",color:"#e8e0ff",fontSize:13,boxSizing:"border-box"}}/>
+                </div>
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,color:"#7766aa",marginBottom:5}}>Description</div>
+                  <textarea value={newClubDesc} onChange={e=>setNewClubDesc(e.target.value)} placeholder="What's this club about?" rows={2} style={{width:"100%",background:"#0d0a1a",border:"1px solid #2e2050",borderRadius:7,padding:"8px 10px",color:"#e8e0ff",fontSize:12,boxSizing:"border-box",resize:"none",fontFamily:"inherit"}}/>
+                </div>
+                <div style={{background:`${newClubColor}11`,border:`1px solid ${newClubColor}33`,borderRadius:8,padding:"8px 10px",marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{fontSize:20}}>{newClubIcon}</div>
+                  <div><div style={{fontWeight:700,fontSize:12,color:newClubColor}}>{newClubName||"Club Name"}</div><div style={{fontSize:10,color:"#7766aa"}}>{newClubDesc||"Your description"}</div></div>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>setShowCreateClub(false)} style={{flex:1,background:"#2e205055",border:"1px solid #2e2050",borderRadius:7,padding:"8px 0",color:"#7766aa",fontSize:13,cursor:"pointer"}}>Cancel</button>
+                  <button onClick={createClub} disabled={!newClubName.trim()} style={{flex:1,background:newClubName.trim()?newClubColor:"#9b6dff44",border:`1px solid ${newClubName.trim()?newClubColor:"#9b6dff"}`,borderRadius:7,padding:"8px 0",color:"#fff",fontSize:13,fontWeight:700,cursor:newClubName.trim()?"pointer":"default"}}>Create Club</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
     return null;
   };
 
