@@ -1,0 +1,33 @@
+name: Build iOS IPA
+on: [push]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Install Dependencies
+        run: |
+          npm install
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
+        
+      - name: Build Web Project
+        run: npm run build
+        
+      - name: Sync Capacitor
+        run: |
+          npx cap init "Wumpus Squad" com.wumpus.squad --web-dir dist
+          npx cap add ios
+          npx cap sync ios
+          
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-files
+          path: ios/App/
