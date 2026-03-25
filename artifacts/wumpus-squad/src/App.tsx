@@ -475,12 +475,13 @@ function MainApp({ user, onLogout }) {
   const [friendSearch, setFriendSearch] = useState("");
   const [loadoutSel, setLoadoutSel] = useState({weapon:"Rifle",armor:"Heavy",perk:"Stealth"});
   const [roles, setRoles] = useState<Record<string,string>>({});
-  /* ── screen share / stream ── */
+  /* ── screen share / stream (club-scoped) ── */
   const [screenStream, setScreenStream] = useState<MediaStream|null>(null);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isCamLive, setIsCamLive]       = useState(false);
   const [camStream, setCamStream]       = useState<MediaStream|null>(null);
-  const [activeStreamer, setActiveStreamer] = useState<{name:string;email:string;type:string}|null>(null);
+  const [streamClubId, setStreamClubId] = useState<string|null>(null);
+  const [clubStreams, setClubStreams]    = useState<Record<string,{name:string;email:string;type:string;ts:number}|null>>({});
   const screenVideoRef  = useRef<HTMLVideoElement>(null);
   const camVideoRef     = useRef<HTMLVideoElement>(null);
   /* ── create group ── */
